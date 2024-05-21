@@ -69,7 +69,10 @@ export const CustomTheming = () => {
         frontmatterPlugin(),
         codeBlockPlugin({ defaultCodeBlockLanguage: 'txt' }),
         sandpackPlugin({ sandpackConfig: virtuosoSampleSandpackConfig }),
-        codeMirrorPlugin({ codeBlockLanguages: { js: 'JavaScript', css: 'CSS', txt: 'text', tsx: 'TypeScript' } }),
+        codeMirrorPlugin({
+          codeBlockLanguages: { js: 'JavaScript', css: 'CSS', txt: 'text', tsx: 'TypeScript' },
+          codeMirrorExtensions: [basicDark]
+        }),
         directivesPlugin({ directiveDescriptors: [YoutubeDirectiveDescriptor, AdmonitionDirectiveDescriptor] }),
         diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: 'boo', codeMirrorExtensions: [basicDark] }),
         markdownShortcutPlugin()
@@ -82,7 +85,13 @@ export const ConditionalToolbar = () => {
   const [outsideState, setOutsideState] = React.useState('foo')
   return (
     <>
-      <button onClick={() => setOutsideState('bar')}>Toggle outside state</button>
+      <button
+        onClick={() => {
+          setOutsideState('bar')
+        }}
+      >
+        Toggle outside state
+      </button>
       {outsideState}
       <MDXEditor
         markdown={'hello world'}

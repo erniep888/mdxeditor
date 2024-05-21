@@ -115,7 +115,7 @@ export const YoutubeDirectiveDescriptor: DirectiveDescriptor<YoutubeDirectiveNod
         <iframe
           width="560"
           height="315"
-          src={`https://www.youtube.com/embed/${mdastNode.attributes?.id}`}
+          src={`https://www.youtube.com/embed/${mdastNode.attributes.id}`}
           title="YouTube video player"
           frameBorder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -139,9 +139,9 @@ export const ALL_PLUGINS = [
   tablePlugin(),
   thematicBreakPlugin(),
   frontmatterPlugin(),
-  codeBlockPlugin({ defaultCodeBlockLanguage: 'txt' }),
+  codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
   sandpackPlugin({ sandpackConfig: virtuosoSampleSandpackConfig }),
-  codeMirrorPlugin({ codeBlockLanguages: { js: 'JavaScript', css: 'CSS', txt: 'text', tsx: 'TypeScript' } }),
+  codeMirrorPlugin({ codeBlockLanguages: { js: 'JavaScript', css: 'CSS', txt: 'Plain Text', tsx: 'TypeScript', '': 'Unspecified' } }),
   directivesPlugin({ directiveDescriptors: [YoutubeDirectiveDescriptor, AdmonitionDirectiveDescriptor] }),
   diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: 'boo' }),
   markdownShortcutPlugin()

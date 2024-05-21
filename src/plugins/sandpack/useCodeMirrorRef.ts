@@ -10,7 +10,7 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
   const activeEditor = useCellValue(activeEditor$)
   const setEditorInFocus = usePublisher(editorInFocus$)
   // const setActiveEditorType = usePublisher('activeEditorType')
-  const codeMirrorRef = React.useRef<CodeMirrorRef>(null)
+  const codeMirrorRef = React.useRef<CodeMirrorRef | null>(null)
   const { lexicalNode } = useCodeBlockEditorContext()
 
   // these flags escape the editor with arrows.
@@ -28,7 +28,7 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
   const onKeyDownHandler = React.useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
-        const state = codeMirrorRef?.current?.getCodemirror()?.state
+        const state = codeMirrorRef.current?.getCodemirror()?.state
         if (state) {
           const docLength = state.doc.length
           const selectionEnd = state.selection.ranges[0].to
@@ -43,7 +43,7 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
                 const node = $getNodeByKey(nodeKey)!
                 const nextSibling = node.getNextSibling()
                 if (nextSibling) {
-                  codeMirrorRef?.current?.getCodemirror()?.contentDOM.blur()
+                  codeMirrorRef.current?.getCodemirror()?.contentDOM.blur()
                   node.selectNext()
                 } else {
                   node.insertAfter($createParagraphNode())
@@ -54,7 +54,7 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
           }
         }
       } else if (e.key === 'ArrowUp') {
-        const state = codeMirrorRef?.current?.getCodemirror()?.state
+        const state = codeMirrorRef.current?.getCodemirror()?.state
         if (state) {
           const selectionStart = state.selection.ranges[0].from
 
@@ -68,7 +68,7 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
                 const node = $getNodeByKey(nodeKey)!
                 const previousSibling = node.getPreviousSibling()
                 if (previousSibling) {
-                  codeMirrorRef?.current?.getCodemirror()?.contentDOM.blur()
+                  codeMirrorRef.current?.getCodemirror()?.contentDOM.blur()
                   node.selectPrevious()
                 } else {
                   // TODO: insert a paragraph before the sandpack node
@@ -80,6 +80,15 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
         }
       } else if (e.key === 'Enter') {
         e.stopPropagation()
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        const state = codeMirrorRef.current?.getCodemirror()?.state
+        const docLength = state?.doc.length
+        if (docLength === 0) {
+          activeEditor?.update(() => {
+            const node = $getNodeByKey(nodeKey)!
+            node.remove()
+          })
+        }
       }
     },
     [activeEditor, nodeKey]
@@ -88,9 +97,9 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
   React.useEffect(() => {
     const codeMirror = codeMirrorRef.current
     setTimeout(() => {
-      codeMirror?.getCodemirror()?.contentDOM?.addEventListener('focus', onFocusHandler)
-      codeMirror?.getCodemirror()?.contentDOM?.addEventListener('keydown', onKeyDownHandler)
-    }, 100)
+      codeMirror?.getCodemirror()?.contentDOM.addEventListener('focus', onFocusHandler)
+      codeMirror?.getCodemirror()?.contentDOM.addEventListener('keydown', onKeyDownHandler)
+    }, 300)
 
     return () => {
       codeMirror?.getCodemirror()?.contentDOM.removeEventListener('focus', onFocusHandler)
@@ -100,7 +109,7 @@ export function useCodeMirrorRef(nodeKey: string, editorType: 'codeblock' | 'san
 
   React.useEffect(() => {
     focusEmitter.subscribe(() => {
-      codeMirrorRef?.current?.getCodemirror()?.focus()
+      codeMirrorRef.current?.getCodemirror()?.focus()
       onFocusHandler()
     })
   }, [focusEmitter, codeMirrorRef, nodeKey, onFocusHandler])

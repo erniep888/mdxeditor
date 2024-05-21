@@ -5,7 +5,7 @@ import React from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { frontmatterDialogOpen$, removeFrontmatter$ } from '.'
 import styles from '../../styles/ui.module.css'
-import { editorRootElementRef$, iconComponentFor$, readOnly$ } from '../core'
+import { editorRootElementRef$, iconComponentFor$, readOnly$, useTranslation } from '../core'
 import { useCellValues, usePublisher } from '@mdxeditor/gurx'
 
 type YamlConfig = { key: string; value: string }[]
@@ -22,6 +22,7 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
     iconComponentFor$,
     frontmatterDialogOpen$
   )
+  const t = useTranslation()
   const setFrontmatterDialogOpen = usePublisher(frontmatterDialogOpen$)
   const removeFrontmatter = usePublisher(removeFrontmatter$)
   const yamlConfig = React.useMemo<YamlConfig>(() => {
@@ -49,15 +50,12 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
         setFrontmatterDialogOpen(false)
         return
       }
-      const yaml = yamlConfig.reduce(
-        (acc, { key, value }) => {
-          if (key && value) {
-            acc[key] = value
-          }
-          return acc
-        },
-        {} as Record<string, string>
-      )
+      const yaml = yamlConfig.reduce<Record<string, string>>((acc, { key, value }) => {
+        if (key && value) {
+          acc[key] = value
+        }
+        return acc
+      }, {})
       onChange(YamlParser.dump(yaml).trim())
       setFrontmatterDialogOpen(false)
     },
@@ -66,11 +64,16 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
 
   return (
     <>
-      <Dialog.Root open={frontmatterDialogOpen} onOpenChange={(open) => setFrontmatterDialogOpen(open)}>
+      <Dialog.Root
+        open={frontmatterDialogOpen}
+        onOpenChange={(open) => {
+          setFrontmatterDialogOpen(open)
+        }}
+      >
         <Dialog.Portal container={editorRootElementRef?.current}>
           <Dialog.Overlay className={styles.dialogOverlay} />
           <Dialog.Content className={styles.largeDialogContent} data-editor-type="frontmatter">
-            <Dialog.Title className={styles.dialogTitle}>Edit document frontmatter</Dialog.Title>
+            <Dialog.Title className={styles.dialogTitle}>{t('frontmatterEditor.title', 'Edit document frontmatter')}</Dialog.Title>
             <form
               onSubmit={(e) => {
                 void handleSubmit(onSubmit)(e)
@@ -89,8 +92,8 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
                 </colgroup>
                 <thead>
                   <tr>
-                    <th>Key</th>
-                    <th>Value</th>
+                    <th>{t('frontmatterEditor.key', 'Key')}</th>
+                    <th>{t('frontmatterEditor.value', 'Value')}</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -105,7 +108,14 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
                           <TableInput {...register(`yamlConfig.${index}.value`, { required: true })} readOnly={readOnly} />
                         </td>
                         <td>
-                          <button type="button" onClick={() => remove(index)} className={styles.iconButton} disabled={readOnly}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              remove(index)
+                            }}
+                            className={styles.iconButton}
+                            disabled={readOnly}
+                          >
                             {iconComponentFor('delete_big')}
                           </button>
                         </td>
@@ -124,7 +134,7 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
                           append({ key: '', value: '' })
                         }}
                       >
-                        Add entry
+                        {t('frontmatterEditor.addEntry', 'Add entry')}
                       </button>
                     </td>
                   </tr>
@@ -132,15 +142,15 @@ export const FrontmatterEditor = ({ yaml, onChange }: FrontmatterEditorProps) =>
               </table>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--spacing-2)' }}>
                 <button type="submit" className={styles.primaryButton}>
-                  Save
+                  {t('dialogControls.save', 'Save')}
                 </button>
                 <button type="reset" className={styles.secondaryButton}>
-                  Cancel
+                  {t('dialogControls.cancel', 'Cancel')}
                 </button>
               </div>
             </form>
             <Dialog.Close asChild>
-              <button className={styles.dialogCloseButton} aria-label="Close">
+              <button className={styles.dialogCloseButton} aria-label={t('dialogControls.cancel', 'Cancel')}>
                 {iconComponentFor('close')}
               </button>
             </Dialog.Close>

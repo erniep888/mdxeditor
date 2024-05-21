@@ -1,37 +1,101 @@
-import { applyFormat$, currentFormat$, iconComponentFor$ } from '../../core'
+import { applyFormat$, currentFormat$, iconComponentFor$, useTranslation } from '../../core'
 import { useCellValues, usePublisher } from '@mdxeditor/gurx'
 import React from 'react'
-import { IS_BOLD, IS_ITALIC, IS_UNDERLINE } from '../../../FormatConstants'
-import { MultipleChoiceToggleGroup } from '.././primitives/toolbar'
+import { FORMAT, IS_BOLD, IS_ITALIC, IS_STRIKETHROUGH, IS_SUBSCRIPT, IS_SUPERSCRIPT, IS_UNDERLINE } from '../../../FormatConstants'
+import { ToggleSingleGroupWithItem } from '.././primitives/toolbar'
+import { TextFormatType } from 'lexical'
+import styles from '../../../styles/ui.module.css'
+import { IconKey } from '../../../defaultSvgIcons'
+
+interface FormatButtonProps {
+  format: FORMAT
+  addTitle: string
+  removeTitle: string
+  icon: IconKey
+  formatName: TextFormatType
+}
+
+const FormatButton: React.FC<FormatButtonProps> = ({ format, addTitle, removeTitle, icon, formatName }) => {
+  const [currentFormat, iconComponentFor] = useCellValues(currentFormat$, iconComponentFor$)
+  const applyFormat = usePublisher(applyFormat$)
+  const active = (currentFormat & format) !== 0
+
+  return (
+    <ToggleSingleGroupWithItem
+      title={active ? removeTitle : addTitle}
+      on={active}
+      onValueChange={() => {
+        applyFormat(formatName)
+      }}
+    >
+      {iconComponentFor(icon)}
+    </ToggleSingleGroupWithItem>
+  )
+}
 
 /**
  * A toolbar component that lets the user toggle bold, italic and underline formatting.
  * @group Toolbar Components
  */
 export const BoldItalicUnderlineToggles: React.FC = () => {
-  const [currentFormat, iconComponentFor] = useCellValues(currentFormat$, iconComponentFor$)
-  const applyFormat = usePublisher(applyFormat$)
-
-  const boldIsOn = (currentFormat & IS_BOLD) !== 0
-  const italicIsOn = (currentFormat & IS_ITALIC) !== 0
-  const underlineIsOn = (currentFormat & IS_UNDERLINE) !== 0
-
-  const boldTitle = boldIsOn ? 'Remove bold' : 'Bold'
-  const italicTitle = italicIsOn ? 'Remove italic' : 'Italic'
-  const underlineTitle = underlineIsOn ? 'Remove underline' : 'Underline'
+  const t = useTranslation()
 
   return (
-    <MultipleChoiceToggleGroup
-      items={[
-        { title: boldTitle, contents: iconComponentFor('format_bold'), active: boldIsOn, onChange: applyFormat.bind(null, 'bold') },
-        { title: italicTitle, contents: iconComponentFor('format_italic'), active: italicIsOn, onChange: applyFormat.bind(null, 'italic') },
-        {
-          title: underlineTitle,
-          contents: <div style={{ transform: 'translateY(2px)' }}>{iconComponentFor('format_underlined')}</div>,
-          active: underlineIsOn,
-          onChange: applyFormat.bind(null, 'underline')
-        }
-      ]}
-    />
+    <div className={styles.toolbarGroupOfGroups}>
+      <FormatButton
+        format={IS_BOLD}
+        addTitle={t('toolbar.bold', 'Bold')}
+        removeTitle={t('toolbar.removeBold', 'Remove bold')}
+        icon="format_bold"
+        formatName="bold"
+      />
+      <FormatButton
+        format={IS_ITALIC}
+        addTitle={t('toolbar.italic', 'Italic')}
+        removeTitle={t('toolbar.removeItalic', 'Remove italic')}
+        icon="format_italic"
+        formatName="italic"
+      />
+      <FormatButton
+        format={IS_UNDERLINE}
+        addTitle={t('toolbar.underline', 'Underline')}
+        removeTitle={t('toolbar.removeUnderline', 'Remove underline')}
+        icon="format_underlined"
+        formatName="underline"
+      />
+    </div>
+  )
+}
+
+/**
+ * A toolbar component that lets the user toggle strikeThrough, superscript and subscript formatting.
+ * @group Toolbar Components
+ */
+export const StrikeThroughSupSubToggles: React.FC = () => {
+  const t = useTranslation()
+  return (
+    <div className={styles.toolbarGroupOfGroups}>
+      <FormatButton
+        format={IS_STRIKETHROUGH}
+        addTitle={t('toolbar.strikethrough', 'Strikethrough')}
+        removeTitle={t('toolbar.removeStrikethrough', 'Remove strikethrough')}
+        icon="strikeThrough"
+        formatName="strikethrough"
+      />
+      <FormatButton
+        format={IS_SUPERSCRIPT}
+        addTitle={t('toolbar.superscript', 'Superscript')}
+        removeTitle={t('toolbar.removeSuperscript', 'Remove superscript')}
+        icon="superscript"
+        formatName="superscript"
+      />
+      <FormatButton
+        format={IS_SUBSCRIPT}
+        addTitle={t('toolbar.subscript', 'Subscript')}
+        removeTitle={t('toolbar.removeSubscript', 'Remove subscript')}
+        icon="subscript"
+        formatName="subscript"
+      />
+    </div>
   )
 }

@@ -50,6 +50,7 @@ export * from './plugins/link'
 export * from './plugins/image'
 export * from './plugins/frontmatter'
 export * from './plugins/quote'
+export * from './plugins/maxlength'
 
 // JSX
 export * from './plugins/jsx'
@@ -114,3 +115,5 @@ export * from './utils/uuid4'
 export * from './utils/voidEmitter'
 
 export * from './RealmWithPlugins'
+
+export * from './FormatConstants'

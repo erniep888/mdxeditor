@@ -8,6 +8,8 @@ position: 0.815
 
 The JSX plugin allows you to process and associate custom editors with the JSX components in your markdown source - a capability enabled by [MDX](https://mdxjs.com/). The package includes a generic editor component, but you can also create your custom editors. The next example includes three JSX descriptors and an example of a custom editor that uses the `NestedLexicalEditor` component to edit the markdown contents of a JSX component.
 
+The JSX syntax also supports `{}` as a way to embed JavaScript expressions in your markdown. Out of the box, the plugin will enable a simple inline editor for the expressions, too.
+
 ```tsx
 const jsxComponentDescriptors: JsxComponentDescriptor[] = [
   {
@@ -19,7 +21,8 @@ const jsxComponentDescriptors: JsxComponentDescriptor[] = [
     // Used to construct the property popover of the generic editor
     props: [
       { name: 'foo', type: 'string' },
-      { name: 'bar', type: 'string' }
+      { name: 'bar', type: 'string' },
+      { name: 'onClick', type: 'expression' }
     ],
     // whether the component has children or not
     hasChildren: true,
@@ -63,7 +66,7 @@ const InsertMyLeaf = () => {
         insertJsx({
           name: 'MyLeaf',
           kind: 'text',
-          props: { foo: 'bar', bar: 'baz' }
+          props: { foo: 'bar', bar: 'baz', onClick: { type: 'expression', value: '() => console.log("Clicked")' } }
         })
       }
     >
@@ -95,11 +98,57 @@ export const Example = () => {
 ```md
 import { MyLeaf, BlockNode } from './external';
 
-A paragraph with inline jsx component <MyLeaf foo="fooValue">Nested _markdown_</MyLeaf> more <Marker type="warning" />.
+A paragraph with inline jsx component <MyLeaf foo="bar" bar="baz" onClick={() => console.log("Clicked")}>Nested _markdown_</MyLeaf> more <Marker type="warning" />.
 
 <BlockNode foo="fooValue">
  Content *foo*
 
 more Content
 </BlockNode>
+```
+
+## Types of properties
+
+There are two types of properties - "textual" and "expressions" in JSX. You can define type in `JsxComponentDescriptor`. `jsxPlugin` will treat the value based on this setting. For example, this code:
+
+```tsx
+const jsxComponentDescriptors: JsxComponentDescriptor[] = [
+  {
+    name: 'MyLeaf',
+    kind: 'text',
+    props: [
+      { name: 'foo', type: 'string' } // Textual property type
+    ],
+    hasChildren: true,
+    Editor: GenericJsxEditor
+  }
+]
+```
+
+will produce component like the following:
+
+```tsx
+<MyLeaf foo="bar">Some text...</MyLeaf>
+```
+
+While this descriptor:
+
+```tsx
+const jsxComponentDescriptors: JsxComponentDescriptor[] = [
+  {
+    name: 'MyLeaf',
+    kind: 'text',
+    props: [
+      { name: 'foo', type: 'expression' } // Expression property type
+    ],
+    hasChildren: true,
+    Editor: GenericJsxEditor
+  }
+]
+```
+
+will produce:
+
+```tsx
+<MyLeaf foo={bar}>Some text...</MyLeaf>
 ```

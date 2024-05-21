@@ -1,7 +1,7 @@
 import { useCellValue } from '@mdxeditor/gurx'
 import { DecoratorNode, EditorConfig, LexicalEditor, LexicalNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical'
 import React from 'react'
-import { CodeBlockEditorProps } from '.'
+import { CodeBlockEditorProps, defaultCodeBlockLanguage$ } from '.'
 import { voidEmitter } from '../../utils/voidEmitter'
 import { NESTED_EDITOR_UPDATED_COMMAND, codeBlockEditorDescriptors$ } from '../core'
 
@@ -159,6 +159,10 @@ export interface CodeBlockEditorContextValue {
    * The Lexical node that's being edited.
    */
   lexicalNode: CodeBlockNode
+  /**
+   * The parent Lexical editor.
+   */
+  parentEditor: LexicalEditor
 }
 
 const CodeBlockEditorContext = React.createContext<CodeBlockEditorContextValue | null>(null)
@@ -168,33 +172,32 @@ const CodeBlockEditorContextProvider: React.FC<{
   lexicalNode: CodeBlockNode
   children: React.ReactNode
 }> = ({ parentEditor, lexicalNode, children }) => {
-  return (
-    <CodeBlockEditorContext.Provider
-      value={{
-        lexicalNode,
-        setCode: (code: string) => {
-          parentEditor.update(() => {
-            lexicalNode.setCode(code)
-            setTimeout(() => {
-              parentEditor.dispatchCommand(NESTED_EDITOR_UPDATED_COMMAND, undefined)
-            }, 0)
-          })
-        },
-        setLanguage: (language: string) => {
-          parentEditor.update(() => {
-            lexicalNode.setLanguage(language)
-          })
-        },
-        setMeta: (meta: string) => {
-          parentEditor.update(() => {
-            lexicalNode.setMeta(meta)
-          })
-        }
-      }}
-    >
-      {children}
-    </CodeBlockEditorContext.Provider>
-  )
+  const contextValue = React.useMemo(() => {
+    return {
+      lexicalNode,
+      parentEditor,
+      setCode: (code: string) => {
+        parentEditor.update(() => {
+          lexicalNode.setCode(code)
+          setTimeout(() => {
+            parentEditor.dispatchCommand(NESTED_EDITOR_UPDATED_COMMAND, undefined)
+          }, 0)
+        })
+      },
+      setLanguage: (language: string) => {
+        parentEditor.update(() => {
+          lexicalNode.setLanguage(language)
+        })
+      },
+      setMeta: (meta: string) => {
+        parentEditor.update(() => {
+          lexicalNode.setMeta(meta)
+        })
+      }
+    }
+  }, [lexicalNode, parentEditor])
+
+  return <CodeBlockEditorContext.Provider value={contextValue}>{children}</CodeBlockEditorContext.Provider>
 }
 
 /**
@@ -218,10 +221,15 @@ const CodeBlockEditorContainer: React.FC<
   } & CodeBlockEditorProps
 > = (props) => {
   const codeBlockEditorDescriptors = useCellValue(codeBlockEditorDescriptors$)
+  const defaultCodeBlockLanguage = useCellValue(defaultCodeBlockLanguage$)
 
-  const descriptor = codeBlockEditorDescriptors
+  let descriptor = codeBlockEditorDescriptors
     .sort((a, b) => b.priority - a.priority)
     .find((descriptor) => descriptor.match(props.language || '', props.meta || ''))
+
+  if (!descriptor) {
+    descriptor = codeBlockEditorDescriptors.find((descriptor) => descriptor.match(defaultCodeBlockLanguage || '', props.meta || ''))
+  }
 
   if (!descriptor) {
     throw new Error(`No CodeBlockEditor registered for language=${props.language} meta=${props.meta}`)

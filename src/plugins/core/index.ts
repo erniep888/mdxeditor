@@ -1,10 +1,9 @@
 import { realmPlugin } from '../../RealmWithPlugins'
-import { InitialEditorStateType } from '@lexical/react/LexicalComposer.js'
 import { createEmptyHistoryState } from '@lexical/react/LexicalHistoryPlugin.js'
 import { $isHeadingNode, HeadingTagType } from '@lexical/rich-text'
 import { $setBlocksType } from '@lexical/selection'
 import { $findMatchingParent, $insertNodeToNearestRoot, $wrapNodeInElement } from '@lexical/utils'
-import { Cell, NodeRef, Realm, Signal, filter, scan, withLatestFrom } from '@mdxeditor/gurx'
+import { Cell, NodeRef, Realm, Signal, filter, map, scan, useCellValue, withLatestFrom } from '@mdxeditor/gurx'
 import {
   $createParagraphNode,
   $getRoot,
@@ -29,9 +28,13 @@ import {
   SELECTION_CHANGE_COMMAND,
   TextFormatType,
   TextNode,
-  createCommand
+  createCommand,
+  createEditor
 } from 'lexical'
 import * as Mdast from 'mdast'
+
+import { gfmStrikethrough } from 'micromark-extension-gfm-strikethrough'
+import { gfmStrikethroughFromMarkdown, gfmStrikethroughToMarkdown } from 'mdast-util-gfm-strikethrough'
 
 import { mdxJsxFromMarkdown, mdxJsxToMarkdown } from 'mdast-util-mdx-jsx'
 import { mdxJsx } from 'micromark-extension-mdx-jsx'
@@ -50,33 +53,33 @@ import { controlOrMeta } from '../../utils/detectMac'
 import { noop } from '../../utils/fp'
 import type { JsxComponentDescriptor } from '../jsx'
 import { GenericHTMLNode } from './GenericHTMLNode'
-import { type IconKey } from './Icon'
 import { LexicalGenericHTMLVisitor } from './LexicalGenericHTMLNodeVisitor'
 import { LexicalLinebreakVisitor } from './LexicalLinebreakVisitor'
 import { LexicalParagraphVisitor } from './LexicalParagraphVisitor'
 import { LexicalRootVisitor } from './LexicalRootVisitor'
 import { LexicalTextVisitor } from './LexicalTextVisitor'
 import { MdastBreakVisitor } from './MdastBreakVisitor'
-import { MdastFormattingVisitor } from './MdastFormattingVisitor'
+import { formattingVisitors } from './MdastFormattingVisitor'
 import { MdastHTMLVisitor } from './MdastHTMLVisitor'
-import { MdastInlineCodeVisitor } from './MdastInlineCodeVisitor'
 import { MdastParagraphVisitor } from './MdastParagraphVisitor'
 import { MdastRootVisitor } from './MdastRootVisitor'
 import { MdastTextVisitor } from './MdastTextVisitor'
 import { SharedHistoryPlugin } from './SharedHistoryPlugin'
 import { DirectiveDescriptor } from '../directives'
 import { CodeBlockEditorDescriptor } from '../codeblock'
-import { Directives } from 'mdast-util-directive'
+import { comment, commentFromMarkdown } from '../../mdastUtilHtmlComment'
+import { lexicalTheme } from '../../styles/lexicalTheme'
+import { FORMAT } from '../../FormatConstants'
+import { IconKey } from '../../defaultSvgIcons'
 export * from './MdastHTMLNode'
 export * from './GenericHTMLNode'
-export * from './Icon'
 
 /**
  * A function that subscribes to Lexical editor updates or events, and retursns an unsubscribe function.
  * @group Core
  */
 export type EditorSubscription = (activeEditor: LexicalEditor) => () => void
-type Teardowns = (() => void)[]
+type Teardowns = ((() => void) | undefined)[]
 
 /**
  * The type of the block that the current selection is in.
@@ -94,7 +97,7 @@ export interface EditorInFocus {
 }
 
 /** @internal */
-export const NESTED_EDITOR_UPDATED_COMMAND = createCommand<void>('NESTED_EDITOR_UPDATED_COMMAND')
+export const NESTED_EDITOR_UPDATED_COMMAND = createCommand<undefined>('NESTED_EDITOR_UPDATED_COMMAND')
 
 /**
  * Holds a reference to the root Lexical editor instance.
@@ -140,7 +143,7 @@ export const inFocus$ = Cell(false)
  * Holds the current format of the selection.
  * @group Core
  */
-export const currentFormat$ = Cell(0)
+export const currentFormat$ = Cell(0 as FORMAT)
 
 /** @internal */
 export const markdownProcessingError$ = Cell<{ error: string; source: string } | null>(null)
@@ -214,6 +217,18 @@ const markdownSignal$ = Signal<string>((r) => {
   r.link(initialMarkdown$, markdown$)
 })
 
+const mutableMarkdownSignal$ = Signal<string>((r) => {
+  r.link(
+    r.pipe(
+      markdownSignal$,
+      withLatestFrom(muteChange$),
+      filter(([, muted]) => !muted),
+      map(([value]) => value)
+    ),
+    mutableMarkdownSignal$
+  )
+})
+
 // import configuration
 /** @internal */
 export const importVisitors$ = Cell<MdastImportVisitor<Mdast.Nodes>[]>([])
@@ -232,18 +247,23 @@ export const toMarkdownExtensions$ = Cell<NonNullable<LexicalConvertOptions['toM
 /** @internal */
 export const toMarkdownOptions$ = Cell<NonNullable<LexicalConvertOptions['toMarkdownOptions']>>({})
 
-// the JSX plugin will fill in these
-/** @internal */
+/**
+ * This JSX plugin will fill this value.
+ * @group JSX
+ */
 export const jsxIsAvailable$ = Cell(false)
 
-/** @internal */
+/**
+ * Contains the currently registered JSX component descriptors.
+ * @group JSX
+ */
 export const jsxComponentDescriptors$ = Cell<JsxComponentDescriptor[]>([])
 
 /**
  * Contains the currently registered Markdown directive descriptors.
  * @group Directive
  */
-export const directiveDescriptors$ = Cell<DirectiveDescriptor<Directives>[]>([])
+export const directiveDescriptors$ = Cell<DirectiveDescriptor[]>([])
 
 /**
  * Contains the currently registered code block descriptors.
@@ -293,6 +313,7 @@ export const addExportVisitor$ = Appender(exportVisitors$)
  */
 export const addToMarkdownExtension$ = Appender(toMarkdownExtensions$)
 
+export const muteChange$ = Cell(false)
 /**
  * Sets a new markdown value for the editor, replacing the current one.
  * @group Core
@@ -307,16 +328,24 @@ export const setMarkdown$ = Signal<string>((r) => {
       })
     ),
     ([theNewMarkdownValue, , editor, inFocus]) => {
-      editor?.update(() => {
-        $getRoot().clear()
-        tryImportingMarkdown(r, $getRoot(), theNewMarkdownValue)
+      r.pub(muteChange$, true)
+      editor?.update(
+        () => {
+          $getRoot().clear()
+          tryImportingMarkdown(r, $getRoot(), theNewMarkdownValue)
 
-        if (!inFocus) {
-          $setSelection(null)
-        } else {
-          editor.focus()
+          if (!inFocus) {
+            $setSelection(null)
+          } else {
+            editor.focus()
+          }
+        },
+        {
+          onUpdate: () => {
+            r.pub(muteChange$, false)
+          }
         }
-      })
+      )
     }
   )
 })
@@ -336,7 +365,7 @@ export const insertMarkdown$ = Signal<string>((r) => {
             this.children.push(node)
           },
           getType() {
-            return selection?.getNodes()[0].getType()
+            return selection.getNodes()[0].getType()
           }
         }
 
@@ -478,6 +507,15 @@ export const createRootEditorSubscription$ = Appender(rootEditorSubscriptions$, 
         let theNewMarkdownValue!: string
 
         editorState.read(() => {
+          const lastChild = $getRoot().getLastChild()
+          if (lastChild instanceof DecoratorNode) {
+            rootEditor.update(
+              () => {
+                $getRoot().append($createParagraphNode())
+              },
+              { discrete: true }
+            )
+          }
           theNewMarkdownValue = exportMarkdownFromLexical({
             root: $getRoot(),
             visitors: r.getValue(exportVisitors$),
@@ -514,6 +552,7 @@ export const createRootEditorSubscription$ = Appender(rootEditorSubscriptions$, 
               shouldOverride = $isDecoratorNode($getRoot().getFirstChild()) || $isDecoratorNode($getRoot().getLastChild())
             })
 
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (shouldOverride) {
               event.preventDefault()
               event.stopImmediatePropagation()
@@ -611,31 +650,6 @@ function tryImportingMarkdown(r: Realm, node: ImportPoint, markdownValue: string
   }
 }
 
-// gets bound to the root editor state getter
-/** @internal */
-export const initialRootEditorState$ = Cell<InitialEditorStateType | null>(null, (r) => {
-  r.pub(initialRootEditorState$, (theRootEditor) => {
-    r.pub(rootEditor$, theRootEditor)
-    r.pub(activeEditor$, theRootEditor)
-
-    tryImportingMarkdown(r, $getRoot(), r.getValue(initialMarkdown$))
-
-    const autoFocusValue = r.getValue(autoFocus$)
-    if (autoFocusValue) {
-      if (autoFocusValue === true) {
-        // Default 'on' state
-        setTimeout(() => theRootEditor.focus(noop, { defaultSelection: 'rootStart' }))
-        return
-      }
-      setTimeout(() =>
-        theRootEditor.focus(noop, {
-          defaultSelection: autoFocusValue.defaultSelection ?? 'rootStart'
-        })
-      )
-    }
-  })
-})
-
 /** @internal */
 export const composerChildren$ = Cell<React.ComponentType[]>([])
 
@@ -716,29 +730,27 @@ export const insertDecoratorNode$ = Signal<() => DecoratorNode<unknown>>((r) => 
         theEditor.getEditorState().read(() => {
           const selection = $getSelection()
           if ($isRangeSelection(selection)) {
-            const focusNode = selection.focus.getNode()
-
-            if (focusNode !== null) {
-              theEditor.update(() => {
-                const node = nodeFactory()
-                if (node.isInline()) {
-                  $insertNodes([node])
-                  if ($isRootOrShadowRoot(node.getParentOrThrow())) {
-                    $wrapNodeInElement(node, $createParagraphNode).selectEnd()
-                  }
-                } else {
-                  $insertNodeToNearestRoot(node)
+            theEditor.update(() => {
+              const node = nodeFactory()
+              if (node.isInline()) {
+                $insertNodes([node])
+                if ($isRootOrShadowRoot(node.getParentOrThrow())) {
+                  $wrapNodeInElement(node, $createParagraphNode).selectEnd()
                 }
+              } else {
+                $insertNodeToNearestRoot(node)
+              }
+              setTimeout(() => {
                 if ('select' in node && typeof node.select === 'function') {
                   // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-                  setTimeout(() => node.select())
+                  node.select()
                 }
               })
+            })
 
-              setTimeout(() => {
-                theEditor.dispatchCommand(NESTED_EDITOR_UPDATED_COMMAND, undefined)
-              })
-            }
+            setTimeout(() => {
+              theEditor.dispatchCommand(NESTED_EDITOR_UPDATED_COMMAND, undefined)
+            })
           }
         })
       },
@@ -809,6 +821,12 @@ export const activePlugins$ = Cell<string[]>([])
  */
 export const addActivePlugin$ = Appender(activePlugins$)
 
+export type Translation = (key: string, defaultValue: string, interpolations?: Record<string, any>) => string
+
+export const translation$ = Cell<Translation>(() => {
+  throw new Error('No translation function provided')
+})
+
 /** @internal */
 export const corePlugin = realmPlugin<{
   initialMarkdown: string
@@ -822,21 +840,16 @@ export const corePlugin = realmPlugin<{
   readOnly: boolean
   iconComponentFor: (name: IconKey) => React.ReactElement
   suppressHtmlProcessing?: boolean
+  translation: Translation
 }>({
   init(r, params) {
     r.register(createRootEditorSubscription$)
     r.register(createActiveEditorSubscription$)
+    r.register(markdownSignal$)
     r.pubIn({
       [initialMarkdown$]: params?.initialMarkdown.trim(),
       [iconComponentFor$]: params?.iconComponentFor,
-      [addImportVisitor$]: [
-        MdastRootVisitor,
-        MdastParagraphVisitor,
-        MdastTextVisitor,
-        MdastFormattingVisitor,
-        MdastInlineCodeVisitor,
-        MdastBreakVisitor
-      ],
+      [addImportVisitor$]: [MdastRootVisitor, MdastParagraphVisitor, MdastTextVisitor, MdastBreakVisitor, ...formattingVisitors],
       [addLexicalNode$]: [ParagraphNode, TextNode, GenericHTMLNode],
       [addExportVisitor$]: [
         LexicalRootVisitor,
@@ -851,18 +864,61 @@ export const corePlugin = realmPlugin<{
       [toMarkdownOptions$]: params?.toMarkdownOptions,
       [autoFocus$]: params?.autoFocus,
       [placeholder$]: params?.placeholder,
-      [readOnly$]: params?.readOnly
+      [readOnly$]: params?.readOnly,
+      [translation$]: params?.translation,
+      [addMdastExtension$]: gfmStrikethroughFromMarkdown(),
+      [addSyntaxExtension$]: gfmStrikethrough(),
+      [addToMarkdownExtension$]: [mdxJsxToMarkdown(), gfmStrikethroughToMarkdown()]
     })
+
+    r.singletonSub(markdownErrorSignal$, params?.onError)
+    r.singletonSub(mutableMarkdownSignal$, params?.onChange)
+    r.singletonSub(onBlur$, params?.onBlur)
 
     // Use the JSX extension to parse HTML
     if (!params?.suppressHtmlProcessing) {
       r.pubIn({
-        [addMdastExtension$]: mdxJsxFromMarkdown(),
-        [addSyntaxExtension$]: [mdxJsx(), mdxMd()],
-        [addToMarkdownExtension$]: mdxJsxToMarkdown(),
+        [addMdastExtension$]: [mdxJsxFromMarkdown(), commentFromMarkdown({ ast: false })],
+        [addSyntaxExtension$]: [mdxJsx(), mdxMd(), comment],
         [addImportVisitor$]: MdastHTMLVisitor
       })
     }
+  },
+
+  postInit(r, params) {
+    const newEditor = createEditor({
+      editable: params?.readOnly !== true,
+      namespace: 'MDXEditor',
+      nodes: r.getValue(usedLexicalNodes$),
+      onError: (error) => {
+        throw error
+      },
+      theme: lexicalTheme
+    })
+
+    newEditor.update(() => {
+      const markdown = params?.initialMarkdown.trim() ?? ''
+      tryImportingMarkdown(r, $getRoot(), markdown)
+
+      const autoFocusValue = params?.autoFocus
+      if (autoFocusValue) {
+        if (autoFocusValue === true) {
+          // Default 'on' state
+          setTimeout(() => {
+            newEditor.focus(noop, { defaultSelection: 'rootStart' })
+          })
+          return
+        }
+        setTimeout(() => {
+          newEditor.focus(noop, {
+            defaultSelection: autoFocusValue.defaultSelection ?? 'rootStart'
+          })
+        })
+      }
+    })
+
+    r.pub(rootEditor$, newEditor)
+    r.pub(activeEditor$, newEditor)
   },
 
   update(realm, params) {
@@ -874,8 +930,12 @@ export const corePlugin = realmPlugin<{
       [readOnly$]: params?.readOnly
     })
 
-    realm.singletonSub(markdownSignal$, params?.onChange)
+    realm.singletonSub(mutableMarkdownSignal$, params?.onChange)
     realm.singletonSub(onBlur$, params?.onBlur)
     realm.singletonSub(markdownErrorSignal$, params?.onError)
   }
 })
+
+export function useTranslation() {
+  return useCellValue(translation$)
+}

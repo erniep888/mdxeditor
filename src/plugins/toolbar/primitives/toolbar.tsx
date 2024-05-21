@@ -43,7 +43,7 @@ function addTooltipToChildren<C extends React.ComponentType<{ children: React.Re
 export const Root: React.FC<{ readOnly: boolean; children: React.ReactNode }> = ({ readOnly, children }) => {
   return (
     <RadixToolbar.Root
-      className={classNames(styles.toolbarRoot, { [styles.readOnlyToolbarRoot]: readOnly })}
+      className={classNames('mdxeditor-toolbar', styles.toolbarRoot, { [styles.readOnlyToolbarRoot]: readOnly })}
       {...(readOnly ? { tabIndex: -1 } : {})}
     >
       {children}
@@ -121,7 +121,9 @@ export const MultipleChoiceToggleGroup: React.FC<{
           key={index}
           title={item.title}
           on={item.active}
-          onValueChange={(v) => item.onChange(v === 'on')}
+          onValueChange={(v) => {
+            item.onChange(v === 'on')
+          }}
           disabled={item.disabled}
         >
           {item.contents}
@@ -146,21 +148,24 @@ export const SingleChoiceToggleGroup = <T extends string>({
     value: T
     contents: React.ReactNode
   }[]
-  onChange: (value: T) => void
-  value: T
+  onChange: (value: T | '') => void
+  value: T | ''
   className?: string
 }) => {
   return (
     <div className={styles.toolbarGroupOfGroups}>
       <RadixToolbar.ToggleGroup
+        aria-label="toggle group"
         type="single"
         className={classNames(styles.toolbarToggleSingleGroup, className)}
         onValueChange={onChange}
         value={value || ''}
-        onFocus={(e) => e.preventDefault()}
+        onFocus={(e) => {
+          e.preventDefault()
+        }}
       >
         {items.map((item, index) => (
-          <ToolbarToggleItem key={index} value={item.value}>
+          <ToolbarToggleItem key={index} aria-label={item.title} value={item.value}>
             <TooltipWrap title={item.title}>{item.contents}</TooltipWrap>
           </ToolbarToggleItem>
         ))}
@@ -205,7 +210,13 @@ export const ButtonOrDropdownButton = <T extends string>(props: {
   return (
     <>
       {props.items.length === 1 ? (
-        <ButtonWithTooltip title={props.title} onClick={() => props.onChoose('' as T)} disabled={readOnly}>
+        <ButtonWithTooltip
+          title={props.title}
+          onClick={() => {
+            props.onChoose('' as T)
+          }}
+          disabled={readOnly}
+        >
           {props.children}
         </ButtonWithTooltip>
       ) : (
@@ -229,7 +240,7 @@ export const ButtonOrDropdownButton = <T extends string>(props: {
  * An object that describes a possible option to be displayed in the {@link ConditionalContents} component.
  * @group Toolbar Primitives
  */
-export type ConditionalContentsOption = {
+export interface ConditionalContentsOption {
   /**
    * A function that returns `true` if the option should be displayed for the current editor in focus.
    */
@@ -244,7 +255,7 @@ export type ConditionalContentsOption = {
  * A default option to be displayed in the {@link ConditionalContents} component if none of the other options match.
  * @group Toolbar Primitives
  */
-export type FallbackOption = {
+export interface FallbackOption {
   /**
    * The contents to display
    */

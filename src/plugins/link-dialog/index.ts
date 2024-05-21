@@ -1,4 +1,4 @@
-import { $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
+import { $createLinkNode, $isLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
 import {
   $createTextNode,
   $getSelection,
@@ -12,7 +12,7 @@ import {
 } from 'lexical'
 import { IS_APPLE } from '../../utils/detectMac'
 import { getSelectedNode, getSelectionRectangle } from '../../utils/lexicalHelpers'
-import { activeEditor$, addComposerChild$, createActiveEditorSubscription$, currentSelection$ } from '../core'
+import { activeEditor$, addComposerChild$, createActiveEditorSubscription$, currentSelection$, readOnly$ } from '../core'
 import { LinkDialog } from './LinkDialog'
 import { Action, Cell, Signal, filter, map, withLatestFrom } from '@mdxeditor/gurx'
 import { realmPlugin } from '../../RealmWithPlugins'
@@ -106,7 +106,7 @@ export const linkDialogState$ = Cell<InactiveLinkDialog | PreviewLinkDialog | Ed
     return editor.registerCommand(
       KEY_MODIFIER_COMMAND,
       (event) => {
-        if (event.key === 'k' && (IS_APPLE ? event.metaKey : event.ctrlKey)) {
+        if (event.key === 'k' && (IS_APPLE ? event.metaKey : event.ctrlKey) && !r.getValue(readOnly$)) {
           const selection = $getSelection()
           // we open the dialog if there's an actual selection
           // or if the cursor is inside a link
@@ -148,25 +148,30 @@ export const linkDialogState$ = Cell<InactiveLinkDialog | PreviewLinkDialog | Ed
   )
 
   r.sub(r.pipe(updateLink$, withLatestFrom(activeEditor$, linkDialogState$, currentSelection$)), ([payload, editor, state, selection]) => {
-    const url = payload.url.trim()
-    const title = payload.title.trim()
+    const url = payload.url?.trim() ?? ''
+    const title = payload.title?.trim() ?? ''
 
-    if (url.trim() !== '') {
+    if (url !== '') {
       if (selection?.isCollapsed()) {
         const linkContent = title || url
         editor?.update(
           () => {
-            if (!getLinkNodeInSelection(selection)) {
-              const node = $createTextNode(linkContent)
+            const linkNode = getLinkNodeInSelection(selection)
+            if (!linkNode) {
+              const node = $createLinkNode(url, { title })
+              node.append($createTextNode(linkContent))
               $insertNodes([node])
               node.select()
+            } else {
+              linkNode.setURL(url)
+              linkNode.setTitle(title)
             }
           },
           { discrete: true }
         )
+      } else {
+        editor?.dispatchCommand(TOGGLE_LINK_COMMAND, { url, title })
       }
-
-      editor?.dispatchCommand(TOGGLE_LINK_COMMAND, { url, title })
 
       r.pub(linkDialogState$, {
         type: 'preview',
@@ -215,9 +220,9 @@ export const linkDialogState$ = Cell<InactiveLinkDialog | PreviewLinkDialog | Ed
   r.link(
     r.pipe(
       r.combine(currentSelection$, onWindowChange$),
-      withLatestFrom(activeEditor$, linkDialogState$),
-      map(([[selection], activeEditor]) => {
-        if ($isRangeSelection(selection) && activeEditor) {
+      withLatestFrom(activeEditor$, linkDialogState$, readOnly$),
+      map(([[selection], activeEditor, _, readOnly]) => {
+        if ($isRangeSelection(selection) && activeEditor && !readOnly) {
           const node = getLinkNodeInSelection(selection)
 
           if (node) {
@@ -244,7 +249,7 @@ export const linkDialogState$ = Cell<InactiveLinkDialog | PreviewLinkDialog | Ed
  * A signal that updates the current link with the published payload.
  * @group Link Dialog
  */
-export const updateLink$ = Signal<{ url: string; title: string }>()
+export const updateLink$ = Signal<{ url: string | undefined; title: string | undefined }>()
 /**
  * An action that cancel the edit of the current link.
  * @group Link Dialog
@@ -285,16 +290,16 @@ export const openLinkEditDialog$ = Action((r) => {
     ),
     ([, selection, editor]) => {
       editor?.focus(() => {
-        editor?.getEditorState().read(() => {
+        editor.getEditorState().read(() => {
           const node = getLinkNodeInSelection(selection)
           const rectangle = getSelectionRectangle(editor)!
           if (node) {
             r.pub(linkDialogState$, {
               type: 'edit',
               initialUrl: node.getURL(),
-              initialTitle: node.getTitle() || '',
+              initialTitle: node.getTitle() ?? '',
               url: node.getURL(),
-              title: node.getTitle() || '',
+              title: node.getTitle() ?? '',
               linkNodeKey: node.getKey(),
               rectangle
             })
@@ -318,17 +323,33 @@ export const openLinkEditDialog$ = Action((r) => {
 /** @internal */
 export const linkAutocompleteSuggestions$ = Cell<string[]>([])
 
+export type ClickLinkCallback = (url: string) => void
+
+/** @internal */
+export const onClickLinkCallback$ = Cell<ClickLinkCallback | null>(null)
+
 /**
  * @group Link Dialog
  */
 export const linkDialogPlugin = realmPlugin<{
+  /**
+   * If passed, the link dialog will be rendered using this component instead of the default one.
+   */
   LinkDialog?: () => JSX.Element
+  /**
+   * If passed, the link input field will autocomplete using the published suggestions.
+   */
   linkAutocompleteSuggestions?: string[]
+  /**
+   * If set, clicking on the link in the preview popup will call this callback instead of opening the link.
+   */
+  onClickLinkCallback?: ClickLinkCallback
 }>({
   init(r, params) {
-    r.pub(addComposerChild$, params?.LinkDialog || LinkDialog)
+    r.pub(addComposerChild$, params?.LinkDialog ?? LinkDialog)
+    r.pub(onClickLinkCallback$, params?.onClickLinkCallback ?? null)
   },
   update(r, params = {}) {
-    r.pub(linkAutocompleteSuggestions$, params.linkAutocompleteSuggestions || [])
+    r.pub(linkAutocompleteSuggestions$, params.linkAutocompleteSuggestions ?? [])
   }
 })

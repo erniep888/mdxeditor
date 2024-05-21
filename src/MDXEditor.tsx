@@ -1,54 +1,44 @@
+import { useCellValue, useCellValues, usePublisher, useRealm } from '@mdxeditor/gurx'
 import React from 'react'
+import { RealmPlugin, RealmWithPlugins } from './RealmWithPlugins'
 import {
+  Translation,
   composerChildren$,
   contentEditableClassName$,
   corePlugin,
   editorRootElementRef$,
   editorWrappers$,
-  initialRootEditorState$,
-  placeholder$,
-  readOnly$,
-  topAreaChildren$,
-  usedLexicalNodes$,
-  markdownSourceEditorValue$,
-  viewMode$,
+  insertMarkdown$,
   markdown$,
-  setMarkdown$,
+  markdownSourceEditorValue$,
+  placeholder$,
   rootEditor$,
-  insertMarkdown$
+  setMarkdown$,
+  topAreaChildren$,
+  viewMode$
 } from './plugins/core'
-import { RealmPlugin, RealmWithPlugins } from './RealmWithPlugins'
-import { useCellValues, usePublisher, useRealm } from '@mdxeditor/gurx'
 
-import { lexicalTheme } from './styles/lexicalTheme'
-import { LexicalComposer } from '@lexical/react/LexicalComposer.js'
-import styles from './styles/ui.module.css'
-import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin.js'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable.js'
 import LexicalErrorBoundary from '@lexical/react/LexicalErrorBoundary.js'
+import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin.js'
 import classNames from 'classnames'
 import { ToMarkdownOptions } from './exportMarkdownFromLexical'
+import { lexicalTheme } from './styles/lexicalTheme'
+import styles from './styles/ui.module.css'
 import { noop } from './utils/fp'
-import { IconKey } from './plugins/core/Icon'
+import { createLexicalComposerContext, LexicalComposerContext, LexicalComposerContextType } from '@lexical/react/LexicalComposerContext'
+import { LexicalEditor } from 'lexical'
+import { IconKey, defaultSvgIcons } from './defaultSvgIcons'
 
-const LexicalProvider: React.FC<{ children: JSX.Element | string | (JSX.Element | string)[] }> = ({ children }) => {
-  const [initialRootEditorState, nodes, readOnly] = useCellValues(initialRootEditorState$, usedLexicalNodes$, readOnly$)
-  return (
-    <LexicalComposer
-      initialConfig={{
-        editable: !readOnly,
-        editorState: initialRootEditorState,
-        namespace: 'MDXEditor',
-        theme: lexicalTheme,
-        nodes: nodes,
-        onError: (error: Error) => {
-          throw error
-        }
-      }}
-    >
-      {children}
-    </LexicalComposer>
-  )
+const LexicalProvider: React.FC<{
+  children: JSX.Element | string | (JSX.Element | string)[]
+}> = ({ children }) => {
+  const rootEditor = useCellValue(rootEditor$)!
+  const composerContextValue = React.useMemo(() => {
+    return [rootEditor, createLexicalComposerContext(null, lexicalTheme)] as [LexicalEditor, LexicalComposerContextType]
+  }, [rootEditor])
+
+  return <LexicalComposerContext.Provider value={composerContextValue}>{children}</LexicalComposerContext.Provider>
 }
 
 const RichTextEditor: React.FC = () => {
@@ -64,19 +54,21 @@ const RichTextEditor: React.FC = () => {
       {topAreaChildren.map((Child, index) => (
         <Child key={index} />
       ))}
-      <RenderRecurisveWrappers wrappers={editorWrappers}>
-        <div className={classNames(styles.rootContentEditableWrapper)}>
+      <RenderRecursiveWrappers wrappers={editorWrappers}>
+        <div className={classNames(styles.rootContentEditableWrapper, 'mdxeditor-root-contenteditable')}>
           <RichTextPlugin
-            contentEditable={<ContentEditable className={classNames(styles.contentEditable, contentEditableClassName)} />}
+            contentEditable={
+              <ContentEditable className={classNames(styles.contentEditable, contentEditableClassName)} ariaLabel="editable markdown" />
+            }
             placeholder={
               <div className={classNames(styles.contentEditable, styles.placeholder, contentEditableClassName)}>
                 <p>{placeholder}</p>
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
-          ></RichTextPlugin>
+          />
         </div>
-      </RenderRecurisveWrappers>
+      </RenderRecursiveWrappers>
       {composerChildren.map((Child, index) => (
         <Child key={index} />
       ))}
@@ -88,17 +80,17 @@ const DEFAULT_MARKDOWN_OPTIONS: ToMarkdownOptions = {
   listItemIndent: 'one'
 }
 
-const DefaultIcon = React.lazy(() => import('./plugins/core/Icon'))
-
-const IconFallback = () => {
-  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none"></svg>
-}
 const defaultIconComponentFor = (name: IconKey) => {
-  return (
-    <React.Suspense fallback={<IconFallback />}>
-      <DefaultIcon name={name} />
-    </React.Suspense>
-  )
+  return defaultSvgIcons[name]
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function defaultTranslation(key: string, defaultValue: string, interpolations = {}) {
+  let value = defaultValue
+  for (const [k, v] of Object.entries(interpolations)) {
+    value = value.replaceAll(`{{${k}}}`, String(v))
+  }
+  return value
 }
 
 /**
@@ -130,37 +122,45 @@ export interface MDXEditorMethods {
   /**
    * Sets focus on input
    */
-  focus: (callbackFn?: (() => void) | undefined, opts?: { defaultSelection?: 'rootStart' | 'rootEnd'; preventScroll?: boolean }) => void
+  focus: (
+    callbackFn?: (() => void) | undefined,
+    opts?: {
+      defaultSelection?: 'rootStart' | 'rootEnd'
+      preventScroll?: boolean
+    }
+  ) => void
 }
 
-const RenderRecurisveWrappers: React.FC<{ wrappers: React.ComponentType<{ children: React.ReactNode }>[]; children: React.ReactNode }> = ({
-  wrappers,
-  children
-}) => {
+const RenderRecursiveWrappers: React.FC<{
+  wrappers: React.ComponentType<{ children: React.ReactNode }>[]
+  children: React.ReactNode
+}> = ({ wrappers, children }) => {
   if (wrappers.length === 0) {
     return <>{children}</>
   }
   const Wrapper = wrappers[0]
   return (
     <Wrapper>
-      <RenderRecurisveWrappers wrappers={wrappers.slice(1)}>{children}</RenderRecurisveWrappers>
+      <RenderRecursiveWrappers wrappers={wrappers.slice(1)}>{children}</RenderRecursiveWrappers>
     </Wrapper>
   )
 }
 
-const EditorRootElement: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => {
+const EditorRootElement: React.FC<{
+  children: React.ReactNode
+  className?: string
+}> = ({ children, className }) => {
   const editorRootElementRef = React.useRef<HTMLDivElement | null>(null)
   const setEditorRootElementRef = usePublisher(editorRootElementRef$)
 
   React.useEffect(() => {
     const popupContainer = document.createElement('div')
-    popupContainer.classList.add(styles.editorRoot)
-    popupContainer.classList.add(styles.popupContainer)
-    if (className) {
-      className.split(' ').forEach((c) => {
-        popupContainer.classList.add(c)
-      })
-    }
+    popupContainer.classList.add(
+      'mdxeditor-popup-container',
+      styles.editorRoot,
+      styles.popupContainer,
+      ...(className ?? '').trim().split(' ').filter(Boolean)
+    )
     document.body.appendChild(popupContainer)
     editorRootElementRef.current = popupContainer
     setEditorRootElementRef(editorRootElementRef)
@@ -168,7 +168,7 @@ const EditorRootElement: React.FC<{ children: React.ReactNode; className?: strin
       popupContainer.remove()
     }
   }, [className, editorRootElementRef, setEditorRootElementRef])
-  return <div className={classNames(styles.editorRoot, styles.editorWrapper, className, 'mdxeditor')}>{children}</div>
+  return <div className={classNames('mdxeditor', styles.editorRoot, styles.editorWrapper, className)}>{children}</div>
 }
 
 const Methods: React.FC<{ mdxRef: React.ForwardedRef<MDXEditorMethods> }> = ({ mdxRef }) => {
@@ -191,7 +191,13 @@ const Methods: React.FC<{ mdxRef: React.ForwardedRef<MDXEditorMethods> }> = ({ m
         insertMarkdown: (markdown) => {
           realm.pub(insertMarkdown$, markdown)
         },
-        focus: (callbackFn?: (() => void) | undefined, opts?: { defaultSelection?: 'rootStart' | 'rootEnd'; preventScroll?: boolean }) => {
+        focus: (
+          callbackFn?: (() => void) | undefined,
+          opts?: {
+            defaultSelection?: 'rootStart' | 'rootEnd'
+            preventScroll?: boolean
+          }
+        ) => {
           realm.getValue(rootEditor$)?.focus(callbackFn, opts)
         }
       }
@@ -264,6 +270,10 @@ export interface MDXEditorProps {
    * Set to false if you want to suppress the processing of HTML tags.
    */
   suppressHtmlProcessing?: boolean
+  /**
+   * Pass your own translation function if you want to localize the editor.
+   */
+  translation?: Translation
 }
 
 /**
@@ -285,9 +295,10 @@ export const MDXEditor = React.forwardRef<MDXEditorMethods, MDXEditorProps>((pro
           readOnly: Boolean(props.readOnly),
           iconComponentFor: props.iconComponentFor ?? defaultIconComponentFor,
           suppressHtmlProcessing: props.suppressHtmlProcessing ?? false,
-          onError: props.onError ?? noop
+          onError: props.onError ?? noop,
+          translation: props.translation ?? defaultTranslation
         }),
-        ...(props.plugins || [])
+        ...(props.plugins ?? [])
       ]}
     >
       <EditorRootElement className={props.className}>

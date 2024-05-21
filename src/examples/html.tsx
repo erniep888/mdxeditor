@@ -20,6 +20,11 @@ import { useCellValues } from '@mdxeditor/gurx'
 const markdownWithSpan = `
   # Hello World
 
+foo
+  <!-- comment -->
+
+bar
+
   A paragraph with <span style="color: red" class="some">some red text <span style="color: blue">with some blue nesting.</span> in here.</span> in it.
 `
 export function HTag() {
@@ -71,7 +76,7 @@ const HTMLToolbarComponent = () => {
   const currentStyle = React.useMemo(() => {
     return (
       activeEditor?.getEditorState().read(() => {
-        const selectedNodes = currentSelection?.getNodes() || []
+        const selectedNodes = currentSelection?.getNodes() ?? []
         if (selectedNodes.length === 1) {
           let node: ElementNode | LexicalNode | null | undefined = selectedNodes[0]
           let style = ''
@@ -79,26 +84,26 @@ const HTMLToolbarComponent = () => {
             if ($isTextNode(node) || $isGenericHTMLNode(node)) {
               style = node.getStyle()
             }
-            node = node?.getParent()
+            node = node.getParent()
           }
           return style
         } else {
           return ''
         }
-      }) || ''
+      }) ?? ''
     )
   }, [currentSelection, activeEditor])
 
   const currentHTMLNode = React.useMemo(() => {
     return (
       activeEditor?.getEditorState().read(() => {
-        const selectedNodes = currentSelection?.getNodes() || []
+        const selectedNodes = currentSelection?.getNodes() ?? []
         if (selectedNodes.length === 1) {
           return $getNearestNodeOfType(selectedNodes[0], GenericHTMLNode)
         } else {
           return null
         }
-      }) || null
+      }) ?? null
     )
   }, [currentSelection, activeEditor])
 
@@ -134,7 +139,7 @@ const HTMLToolbarComponent = () => {
         onChange={(e) => {
           activeEditor?.update(
             () => {
-              const attributesWithoutClass = currentHTMLNode?.getAttributes().filter((attr) => attr.name !== 'class') || []
+              const attributesWithoutClass = currentHTMLNode?.getAttributes().filter((attr) => attr.name !== 'class') ?? []
               const newClassAttr: MdxJsxAttribute = { type: 'mdxJsxAttribute', name: 'class', value: e.target.value }
               currentHTMLNode?.updateAttributes([...attributesWithoutClass, newClassAttr])
             },
@@ -151,7 +156,7 @@ const HTMLToolbarComponent = () => {
               //  const children = currentHTMLNode?.getChildren() || []
               currentHTMLNode?.remove()
               const selection = $getSelection()
-              selection?.insertNodes(currentHTMLNode?.getChildren() || [])
+              selection?.insertNodes(currentHTMLNode?.getChildren() ?? [])
             })
           }
         }}
@@ -174,7 +179,7 @@ const HTMLToolbarComponent = () => {
                   }))
 
                   const newNode = $createGenericHTMLNode('span', 'mdxJsxTextElement', attributes)
-                  selection?.insertNodes([newNode])
+                  selection.insertNodes([newNode])
 
                   // newNode.insertAfter(slicedPortion)
                   // newNode.append(slicedPortion)
@@ -197,5 +202,5 @@ const HTMLToolbarComponent = () => {
 }
 
 function getCssClass(node: GenericHTMLNode | null) {
-  return (node?.getAttributes().find((attr) => attr.name === 'class')?.value as string) ?? ''
+  return (node?.getAttributes().find((attr) => attr.name === 'class')?.value as string | undefined) ?? ''
 }

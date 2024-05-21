@@ -4,25 +4,26 @@ module.exports = {
   parserOptions: {
     tsconfigRootDir: __dirname,
     project: ['./tsconfig.json'],
-    sourceType: 'module',
+    sourceType: 'module'
   },
   plugins: ['react', '@typescript-eslint', 'json', 'html'],
   env: {
     browser: true,
     es2021: true,
-    node: true,
+    node: true
   },
   extends: [
-    'plugin:@typescript-eslint/recommended',
-    'plugin:@typescript-eslint/recommended-requiring-type-checking',
+    'eslint:recommended',
+    'plugin:@typescript-eslint/strict-type-checked',
+    'plugin:@typescript-eslint/stylistic-type-checked',
     'plugin:react/recommended',
     'plugin:react-hooks/recommended',
     'prettier',
-    'plugin:prettier/recommended',
+    'plugin:prettier/recommended'
   ],
   overrides: [
     {
-      "files": ["./postcss.config.js", "./vite.config.ts", "./tailwind.config.ts"],
+      files: ['./postcss.config.js', './vite.config.ts', './tailwind.config.ts'],
       parserOptions: { project: null }
     }
   ],
@@ -32,6 +33,7 @@ module.exports = {
     '@typescript-eslint/no-unsafe-return': 'off',
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/restrict-template-expressions': 'off',
+    '@typescript-eslint/no-unnecessary-type-assertion': 'off',
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'react/prop-types': 'off',
     'react/display-name': 'off',
@@ -40,22 +42,22 @@ module.exports = {
       {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_',
-        caughtErrorsIgnorePattern: '^_',
-      },
+        caughtErrorsIgnorePattern: '^_'
+      }
     ],
     '@typescript-eslint/no-misused-promises': [
       2,
       {
         checksVoidReturn: {
-          attributes: false,
-        },
-      },
-    ],
+          attributes: false
+        }
+      }
+    ]
   },
   settings: {
     react: {
-      version: 'detect', // React version. "detect" automatically picks the version you have installed.
-    },
+      version: 'detect' // React version. "detect" automatically picks the version you have installed.
+    }
   },
-  ignorePatterns: ['.eslintrc.cjs'],
+  ignorePatterns: ['.eslintrc.cjs']
 }

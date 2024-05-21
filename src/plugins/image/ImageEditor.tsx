@@ -20,9 +20,9 @@ import {
   KEY_ESCAPE_COMMAND,
   SELECTION_CHANGE_COMMAND
 } from 'lexical'
-import { disableImageResize$, imagePreviewHandler$, openEditImageDialog$ } from '.'
+import { disableImageResize$, disableImageSettingsButton$, imagePreviewHandler$, openEditImageDialog$ } from '.'
 import styles from '../../styles/ui.module.css'
-import { iconComponentFor$, readOnly$ } from '../core'
+import { iconComponentFor$, readOnly$, useTranslation } from '../core'
 import { $isImageNode } from './ImageNode'
 import ImageResizer from './ImageResizer'
 import { useCellValues, usePublisher } from '@mdxeditor/gurx'
@@ -40,6 +40,7 @@ const imageCache = new Set()
 
 function useSuspenseImage(src: string) {
   if (!imageCache.has(src)) {
+    // eslint-disable-next-line @typescript-eslint/no-throw-literal, @typescript-eslint/only-throw-error
     throw new Promise((resolve) => {
       const img = new Image()
       img.src = src
@@ -71,7 +72,7 @@ function LazyImage({
   useSuspenseImage(src)
   return (
     <img
-      className={className || undefined}
+      className={className ?? undefined}
       alt={alt}
       src={src}
       title={title}
@@ -84,8 +85,9 @@ function LazyImage({
 }
 
 export function ImageEditor({ src, title, alt, nodeKey, width, height }: ImageEditorProps): JSX.Element | null {
-  const [disableImageResize, imagePreviewHandler, iconComponentFor, readOnly] = useCellValues(
+  const [disableImageResize, disableImageSettingsButton, imagePreviewHandler, iconComponentFor, readOnly] = useCellValues(
     disableImageResize$,
+    disableImageSettingsButton$,
     imagePreviewHandler$,
     iconComponentFor$,
     readOnly$
@@ -101,6 +103,7 @@ export function ImageEditor({ src, title, alt, nodeKey, width, height }: ImageEd
   const [isResizing, setIsResizing] = React.useState<boolean>(false)
   const [imageSource, setImageSource] = React.useState<string | null>(null)
   const [initialImagePath, setInitialImagePath] = React.useState<string | null>(null)
+  const t = useTranslation()
 
   const onDelete = React.useCallback(
     (payload: KeyboardEvent) => {
@@ -158,7 +161,9 @@ export function ImageEditor({ src, title, alt, nodeKey, width, height }: ImageEd
         const updatedSrc = await imagePreviewHandler(src)
         setImageSource(updatedSrc)
       }
-      callPreviewHandler().catch(console.error)
+      callPreviewHandler().catch((e: unknown) => {
+        console.error(e)
+      })
     } else {
       setImageSource(src)
     }
@@ -258,32 +263,49 @@ export function ImageEditor({ src, title, alt, nodeKey, width, height }: ImageEd
               [styles.focusedImage]: isFocused
             })}
             src={imageSource}
-            title={title || ''}
-            alt={alt || ''}
+            title={title ?? ''}
+            alt={alt ?? ''}
             imageRef={imageRef}
           />
         </div>
         {draggable && isFocused && !disableImageResize && (
           <ImageResizer editor={editor} imageRef={imageRef} onResizeStart={onResizeStart} onResizeEnd={onResizeEnd} />
         )}
-        <button
-          type="button"
-          className={classNames(styles.iconButton, styles.editImageButton)}
-          title="Edit image"
-          disabled={readOnly}
-          onClick={() => {
-            openEditImageDialog({
-              nodeKey: nodeKey,
-              initialValues: {
-                src: !initialImagePath ? imageSource : initialImagePath,
-                title: title || '',
-                altText: alt || ''
-              }
-            })
-          }}
-        >
-          {iconComponentFor('settings')}
-        </button>
+        <div className={styles.editImageToolbar}>
+          <button
+            className={styles.iconButton}
+            type="button"
+            title={t('image.delete', 'Delete image')}
+            onClick={(e) => {
+              e.preventDefault()
+              editor.update(() => {
+                $getNodeByKey(nodeKey)?.remove()
+              })
+            }}
+          >
+            {iconComponentFor('delete_small')}
+          </button>
+          {!disableImageSettingsButton && (
+            <button
+              type="button"
+              className={classNames(styles.iconButton, styles.editImageButton)}
+              title={t('imageEditor.editImage', 'Edit image')}
+              disabled={readOnly}
+              onClick={() => {
+                openEditImageDialog({
+                  nodeKey: nodeKey,
+                  initialValues: {
+                    src: !initialImagePath ? imageSource : initialImagePath,
+                    title: title ?? '',
+                    altText: alt ?? ''
+                  }
+                })
+              }}
+            >
+              {iconComponentFor('settings')}
+            </button>
+          )}
+        </div>
       </div>
     </React.Suspense>
   ) : null
